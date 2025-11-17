@@ -23,7 +23,7 @@ install.packages('rstan')
 install.packages("cmdstanr", repos = c('https://stan-dev.r-universe.dev', getOption("repos")))
 ```
 
-- brms: very powerful and hacker Stan model builder, cover 80%+ of normal use cases. Support mostly everything in lme4, mgcv, gamm4, quantreg and more. It generates readable Stan code so you can even learn and improve from it (my way).
+- brms: very powerful and hackable Stan model builder, cover 80%+ of normal use cases. Support mostly everything in lme4, mgcv, gamm4, quantreg and more. It generates readable Stan code so you can even learn and improve from it (my way).
 
 ```r
 install.packages('brms')
@@ -31,7 +31,7 @@ install.packages('brms')
 
 ## Other packages you may interest
 
-- rstanarm: pre-compiled Stan model that does a lot of things brms does. It doesn't need compliation for every new model but it is less flexible and does not support mulit-threading.
+- rstanarm: pre-compiled Stan models that does a lot of things brms does. It doesn't need compliation for every new model but it is less flexible and does not support mulit-threading.
 
 ```r
 install.packages('rstanarm')

@@ -18,6 +18,7 @@ parameters {
 transformed parameters {
    real lprior = 0.0; // if you want to investigate prior impact
    lprior += student_t_lpdf(beta | 3, 0, 2.5);
+   lprior += student_t_lpdf(sigma | 3, 0, 2.5) - student_t_lcdf(0 | 3, 0, 2.5);
 }
 
 model {

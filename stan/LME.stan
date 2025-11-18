@@ -38,7 +38,7 @@ transformed parameters {
    real lprior = 0.0; // if you want to investigate prior impact
    lprior += student_t_lpdf(beta | 3, 0, 2.5);
    lprior += student_t_lpdf(sigma | 3, 0, 2.5) - student_t_lccdf(0 | 3, 0, 2.5); //same as sigma ~ student_t(3,0,2.5)T[0, ];
-   lprior += student_t_lpdf(sd | 3, 0, 2.5) - M_1 * student_t_lccdf(0 | 3, 0, 2.5); //same as sd ~ student_t(3,0,2.5)T[0, ];
+   lprior += student_t_lpdf(sd | 3, 0, 2.5) - K * student_t_lccdf(0 | 3, 0, 2.5); //same as sd ~ student_t(3,0,2.5)T[0, ];
    lprior += lkj_corr_cholesky_lpdf(L | 1); // eta = 1 equivalent to Uniform(0,1);
 }
 

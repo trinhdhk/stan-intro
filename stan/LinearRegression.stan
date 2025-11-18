@@ -1,4 +1,4 @@
-// Demo stan code
+// Demo stan code - Linear model
 // trinhdhk
 data {
     // metadata
@@ -18,7 +18,7 @@ parameters {
 transformed parameters {
    real lprior = 0.0; // if you want to investigate prior impact
    lprior += student_t_lpdf(beta | 3, 0, 2.5);
-   lprior += student_t_lpdf(sigma | 3, 0, 2.5) - student_t_lcdf(0 | 3, 0, 2.5);
+   lprior += student_t_lpdf(sigma | 3, 0, 2.5) - student_t_lccdf(0 | 3, 0, 2.5); //same as sigma ~ student_t(3,0,2.5)T[0, ];
 }
 
 model {

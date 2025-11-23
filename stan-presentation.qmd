@@ -1,0 +1,258 @@
+---
+title: "Introduction to Stan and R Workflows"
+author: "trinh dong"
+date: "2025-11-23"
+format:
+    revealjs: 
+        code-fold: true
+        scroll-view: true
+        scrollable: true
+
+theme: simple
+execute: 
+    echo: true
+---
+
+## MCMC and HMC {.smaller}
+
+- **MCMC (Markov chain Monte Carlo):** draws from posterior using a Markov chain.
+- **HMC (Hamiltonian Monte Carlo):** efficient gradient-based MCMC used by Stan (fewer random-walk moves, better mixing for many models).
+
+## What is Stan? {.smaller}
+
+- Stan: probabilistic programming language implementing HMC/NUTS and other inference methods.
+- Model specified via blocks: data, transformed data, parameters, transformed parameters, model, generated quantities.
+
+## Stan program skeleton {.smaller}
+
+```stan
+// Demo stan code - Linear model
+// trinhdhk
+data {
+    // metadata
+    int<lower=0> N; // sample size
+    int<lower=0> M; // feature dimension
+
+    // design matrix
+    vector[N] Y;    // outcome
+    matrix[N, M] X; // model matrix, including intercept
+}
+
+parameters {
+    vector[M] beta;      // coef
+    real<lower=0> sigma; // dispersion term
+}
+
+transformed parameters {
+   real lprior = 0.0; // if you want to investigate prior impact
+   lprior += student_t_lpdf(beta | 3, 0, 2.5);
+   lprior += student_t_lpdf(sigma | 3, 0, 2.5) - student_t_lccdf(0 | 3, 0, 2.5); //same as sigma ~ student_t(3,0,2.5)T[0, ];
+}
+
+model {
+    vector[N] mu = X * beta; // quotation mark for transpose(X) and * is matmul.
+    target += lprior;       
+    target += normal_lpdf(Y | mu, sigma); 
+}
+
+generated quantities {
+   vector[N] log_lik;
+   vector[N] mu = X * beta; 
+   for (n in 1:N){
+        log_lik[n] = normal_lpdf(Y[n] | mu[n], sigma);
+   }
+} 
+```
+
+## Simulate data: linear regression  {.smaller}
+
+```{r}
+set.seed(123)
+N <- 100
+x <- rnorm(N, 0, 1)
+alpha_true <- 1.0
+beta_true <- 2.5
+sigma_true <- 0.8
+y <- alpha_true + beta_true * x + rnorm(N, 0, sigma_true)
+df <- data.frame(x = x, y = y)
+```
+
+run this R code to create a toy dataset for the regression example. The variables `x` and `y` will be used as inputs to the Stan model.
+
+## Prepare Stan data & compile model  {.smaller}
+
+```{r}
+library(cmdstanr)
+# adjust path if your model is at `stan/LinearRegression.stan`
+mod <- cmdstan_model("stan/LinearRegression.stan")
+data_list <- list(N = N, M = 2, X = model.matrix(~x, data=df), Y = y)
+```
+
+## Fit with NUTS  {.smaller}
+
+```{r}
+fit <- mod$sample(
+    data = data_list,
+    seed = 123,
+    chains = 4,
+    refresh = 0,
+    parallel_chains = 4,
+    iter_warmup = 1000,
+    iter_sampling = 1000
+)
+
+print(fit)
+```
+
+Instruction: run the sampling command to draw posterior samples using NUTS. Use `print(fit)` for a quick console summary; use `fit$summary()` for a detailed table.
+
+## Summarize & diagnose  {.smaller}
+
+```{r}
+library(posterior)
+library(bayesplot)
+
+draws <- as_draws_df(fit$draws())
+summarize_draws(draws)
+fit$cmdstan_diagnose()
+```
+
+Look for R-hat near 1, sufficient ESS, and no or few divergences.
+
+Instruction: `summarize_draws()` gives posterior means/medians and intervals. `fit$cmdstan_diagnose()` reports sampler warnings — investigate any divergences or max tree depth hits.
+
+## Workflow & recommended checks  {.smaller}
+
+- Check sampling diagnostics: R-hat, ESS, divergences, tree depth
+- Use PPCs to assess predictive fit
+- Compare models with PSIS-LOO or cross-validation
+
+## Visual diagnostics  {.smaller}
+
+```r
+# traceplots and density overlays
+mcmc_trace(as.array(fit$draws(variables = c("beta","sigma"))))
+mcmc_intervals(as.array(fit$draws(variables = "beta")), prob_outer=0.95)
+
+# posterior predictive check
+ppc_dens_overlay(y, as.matrix(fit$draws(variables = "y_rep")))
+```
+
+Instruction: use traceplots to check mixing and stationarity. Overlayed densities and PPCs help assess whether the model reproduces observed data patterns.
+
+## Variational inference with ADVI {.smaller}
+
+- **Variational inference (ADVI):** fast, approximate posterior (useful for large datasets or exploratory modeling).
+
+```{r}
+fit_vb <- mod$variational(data = data_list, seed = 123)
+print(fit_vb)
+```
+
+## Optimization / MAP  {.smaller}
+
+- **Optimization:** find posterior mode (MAP), useful for initialization, quick point estimate, or Laplace approximations.
+
+```r
+opt <- mod$optimize(data = data_list)
+opt$summary()
+```
+
+## Pathfinder & Laplace approximation {.smaller}
+
+- **Pathfinder:** fast method to find high-density proposals (check CmdStan/Pathfinder docs for availability).
+- **Laplace approximation:** Gaussian approx around the mode using Hessian; often done after `optimize()`.
+
+Instruction: these are approximate alternatives to full MCMC. Use them for rapid exploration but validate with sampling for final inference.
+
+# brms: model building in R {.smaller}
+
+## What is brms
+
+```{r}
+library(brms)
+# simple linear model
+fit_brm <- brm(y ~ x, data = df, chains = 2, cores=2, backend='cmdstanr', iter = 1000, refresh=0)
+```
+
+`brms` builds Bayesian models using formula syntax and can use Stan under the hood. Run this to fit a simple regression; use more chains and iterations for production use.
+
+## brms: extract Stan code and data  {.smaller}
+
+```r
+standata <- standata(y ~ x, data = df)
+stancode_text <- stancode(y ~ x, data = df)
+```
+
+You can save `stancode_text` to a `.stan` file and run with cmdstanr.
+
+## brms: Linear mixed model {.smaller}
+
+```{r}
+set.seed(7)
+G <- 10
+group <- rep(1:G, each = N/G)
+alpha_g <- rnorm(G, 1, 0.5)
+y_lme <- alpha_g[group] + beta_true * x + rnorm(N, 0, sigma_true)
+df_lme <- data.frame(x = x, y = y_lme, group = factor(group))
+```
+
+## brms: fit linear mixed model  {.smaller}
+
+```{r}
+fit_lme <- brm(y ~ x + (1|group), data = df_lme, cores = 2, chains=2, backend='cmdstanr', refresh=0)
+fit_lme
+```
+
+Instruction: fit the mixed model with `brms`. `cores = 4` speeds up sampling by running chains in parallel; adjust to your machine.
+
+## brms: quantile (LME quantile) example  {.smaller}
+
+```{r}
+# brms supports quantile-like models via the asymmetric Laplace family
+fit_qr <- brm(bf(y ~ x + (1|group), quantile=0.5),
+            data = df_lme,
+            family = asym_laplace(),
+            chains = 3,
+            refresh = 0,
+            prior = c(prior(normal(0,5), class = "b")),
+            cores = 3)
+print(fit_qr)
+```
+
+Note: check `brms` docs for the `asym_laplace` family and how to set the quantile parameter if needed.
+
+## Summarize brms results  {.smaller}
+
+```{r}
+summary(fit_lme)
+posterior_samples <- as_draws_df(fit_lme)
+bayes_R2(fit_lme)
+```
+
+Discuss fixed effects, group SDs, R-hat, and ESS.
+
+## bayesplot visualizations  {.smaller}
+
+```r
+library(bayesplot)
+mcmc_trace(as.matrix(fit_lme))
+mcmc_dens_overlay(as.matrix(fit_lme, pars = "b_x"))
+pp_check(fit_lme, resp = "y")
+```
+
+Instruction: these visuals help you inspect mixing, posterior densities, and how well the model predicts observed data. Run them interactively to explore model fit.
+
+## Other useful packages  {.smaller}
+
+- **loo:** PSIS-LOO for model comparison (`loo` or `loo::loo()` / `brms::loo()`)
+- **projpred:** projection predictive variable selection for Bayesian models
+
+Instruction: use `loo` to compare models via approximate leave-one-out cross-validation; `projpred` helps with variable selection while preserving predictive performance.
+
+# References  {.smaller}
+
+- CmdStanR: https://mc-stan.org/cmdstanr/
+- brms: https://paul-buerkner.github.io/brms/
+- bayesplot: https://mc-stan.org/bayesplot/
+- loo & projpred docs

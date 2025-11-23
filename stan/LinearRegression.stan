@@ -22,14 +22,14 @@ transformed parameters {
 }
 
 model {
-    vector[N] mu = X' * beta; // quotation mark for transpose(X) and * is matmul.
+    vector[N] mu = X * beta; // quotation mark for transpose(X) and * is matmul.
     target += lprior;       
     target += normal_lpdf(Y | mu, sigma); 
 }
 
 generated quantities {
    vector[N] log_lik;
-   vector[N] mu = X' * beta; 
+   vector[N] mu = X * beta; 
    for (n in 1:N){
         log_lik[n] = normal_lpdf(Y[n] | mu[n], sigma);
    }
